@@ -32,12 +32,10 @@ namespace ExecuteRScriptWithCustomActivity
             IDictionary<string, string> extendedProperties = ((DotNetActivity)activity.TypeProperties).ExtendedProperties;
 
             //These file paths are specific to the R script.  We pass the file paths to our R script as parameters via the pipeline json
-            string experimentType;
-            extendedProperties.TryGetValue("modelType", out experimentType);
-            string snapShotFile;
-            extendedProperties.TryGetValue("snapShotFile", out snapShotFile);
-            string timeSeriesFile;
-            extendedProperties.TryGetValue("timeSeriesFile", out timeSeriesFile);
+
+            string usDataFile;
+            extendedProperties.TryGetValue("usDataFile", out usDataFile);
+
             string blobPath;
             extendedProperties.TryGetValue("blobPath", out blobPath);
             string churnTagFile;
@@ -58,7 +56,7 @@ namespace ExecuteRScriptWithCustomActivity
 
             logger.Write("Starting Batch Execution Service");
 
-            InvokeR(experimentType, snapShotFile, timeSeriesFile, churnTagFile, blobPath, outputFile, logger);
+            InvokeR(usDataFile, blobPath, outputFile, logger);
 
             return new Dictionary<string, string>();
         }
@@ -92,11 +90,11 @@ namespace ExecuteRScriptWithCustomActivity
         /// <param name="blobPath"></param>
         /// <param name="outputFile"></param>
         /// <param name="logger"></param>
-        public static void InvokeR(string experimentType, string snapShotFile, string timeSeriesFile, string churnTagFile, string blobPath, string outputFile, IActivityLogger logger)
+        public static void InvokeR(string usDataFile, string blobPath, string outputFile, IActivityLogger logger)
         {
 
             const string accountName = "labarlaetl";
-            const string accountKey = "uvG1FcwLb4ksUNeZjd6r7y8nMKhAMz7bldZofwxsn3dPwQ/nsCboF/7udQSV13aCZhaUfcOukDIZQGPSwFsWwA==";
+            const string accountKey = "";
             var connectionString = String.Format("DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1}", accountName, accountKey);
 
             logger.Write("Azure storage connection string {0}", connectionString);
@@ -122,18 +120,9 @@ namespace ExecuteRScriptWithCustomActivity
                 string[] blobNames;
                 const string containerName = "hdiclustertest";
 
-                //gen_ts_features.r is one of the files the R script requires. train.r and score.r are the R scripts themselves.
-                var sourceFile = "gen_ts_features.r";
-                if (experimentType.ToUpper().Equals("TRAINING"))
-                {
-                    pathToRExecutable = "train.r";
-                    blobNames = new[] { sourceFile, pathToRExecutable, snapShotFile, timeSeriesFile, churnTagFile };
-                }
-                else
-                {
-                    pathToRExecutable = "score.r";
-                    blobNames = new[] { sourceFile, pathToRExecutable, snapShotFile, timeSeriesFile };
-                }
+                pathToRExecutable = "etl.r";
+                blobNames = new[] { pathToRExecutable, usDataFile };
+
 
                 var resultBlobPath = String.Format("{0}/{1}", containerName, blobPath);
 
@@ -143,9 +132,9 @@ namespace ExecuteRScriptWithCustomActivity
                 var workingDirectory = new FileInfo(typeof(RExecutionActivity).Assembly.Location).DirectoryName;
                 logger.Write(String.Format("Directory Name : {0}", workingDirectory));
 
-                //var workingDirectory = CreateWorkingDirectory();
                 logger.Write(String.Format("Working directory created: {0}", workingDirectory));
 
+                //TODO: Fix path to R binary
                 DirectoryCopy(@"C:\apps\dist\R", workingDirectory, true);
 
                 logger.Write("Downloading input files used by this sample to the Working Directory");
@@ -164,25 +153,19 @@ namespace ExecuteRScriptWithCustomActivity
 
                 logger.Write("Input Files Download completed");
 
-                sourceFile = inputFileNames[0];
-                pathToRExecutable = inputFileNames[1];
-                var ssFile = inputFileNames[2];
-                var tsFile = inputFileNames[3];
+                //Note this assumes the data, and r etl logic lies in the same container (but different blobs)
+                pathToRExecutable = inputFileNames[0];
+                var usFile = inputFileNames[1];
+                
                 string args;
                 var outputFileName = String.Format("{0}\\{1}", workingDirectory, outputFile);
 
                 logger.Write(String.Format("Output file name : {0}", outputFileName));
 
-                if (experimentType.ToUpper().Equals("TRAINING"))
-                {
-                    var tagFile = inputFileNames[4];
-                    args = String.Format("{0} {1} {2} {3} {4}", sourceFile, tsFile, ssFile, tagFile, outputFileName);
-                    logger.Write(String.Format("Arguments in training are : {0}", args));
-                }
-                else
-                {
-                    args = String.Format("{0} {1} {2} {3}", sourceFile, tsFile, ssFile, outputFileName);
-                }
+
+                args = String.Format("{0} {1}", usFile, outputFileName);
+                logger.Write(String.Format("Arguments in training are : {0}", args));
+               
 
                 /////R execution/////
 
