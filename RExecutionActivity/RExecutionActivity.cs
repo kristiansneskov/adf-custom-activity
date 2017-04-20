@@ -2,39 +2,38 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Reflection;
-
 using Microsoft.Azure.Management.DataFactories.Models;
 using Microsoft.Azure.Management.DataFactories.Runtime;
-
 using Microsoft.WindowsAzure.Storage;
-using Microsoft.WindowsAzure.Storage.Blob;
-using System.IO.Compression;
 
 namespace ExecuteRScriptWithCustomActivity
 {
     public class RExecutionActivity : IDotNetActivity
     {
         /// <summary>
-        /// Override Execute method in ADF .Net Activity
+        ///     Override Execute method in ADF .Net Activity
         /// </summary>
         /// <param name="linkedServices"></param>
         /// <param name="datasets"></param>
         /// <param name="activity"></param>
         /// <param name="logger"></param>
         /// <returns></returns>
-        public IDictionary<string, string> Execute(IEnumerable<LinkedService> linkedServices, IEnumerable<Dataset> datasets, Activity activity, IActivityLogger logger)
+        public IDictionary<string, string> Execute(IEnumerable<LinkedService> linkedServices,
+            IEnumerable<Dataset> datasets, Activity activity, IActivityLogger logger)
         {
             logger.Write("Executing R with ADF .Net Activity");
 
             AppDomain.CurrentDomain.AssemblyResolve += CurrentDomain_AssemblyResolve;
 
-            IDictionary<string, string> extendedProperties = ((DotNetActivity)activity.TypeProperties).ExtendedProperties;
+            var extendedProperties = ((DotNetActivity) activity.TypeProperties).ExtendedProperties;
 
             //These file paths are specific to the R script.  We pass the file paths to our R script as parameters via the pipeline json
-
+            /*
             string usDataFile;
             extendedProperties.TryGetValue("usDataFile", out usDataFile);
+
 
             string blobPath;
             extendedProperties.TryGetValue("blobPath", out blobPath);
@@ -42,27 +41,27 @@ namespace ExecuteRScriptWithCustomActivity
             extendedProperties.TryGetValue("churnTagFile", out churnTagFile);
             string outputFile;
             extendedProperties.TryGetValue("outputFile", out outputFile);
-
+            */
             // to log information, use the logger object
             // log all extended properties            
             logger.Write("Logging extended properties if any...");
-            foreach (KeyValuePair<string, string> entry in extendedProperties)
-            {
+            foreach (var entry in extendedProperties)
                 logger.Write("<key:{0}> <value:{1}>", entry.Key, entry.Value);
-            }
 
 
-
+            string inputDataFile = "file.txt";
+            string outputBlobPath = "output";
+            string outputFile = "output_from_r.txt";
 
             logger.Write("Starting Batch Execution Service");
 
-            InvokeR(usDataFile, blobPath, outputFile, logger);
+            InvokeR(inputDataFile, outputBlobPath, outputFile, logger);
 
             return new Dictionary<string, string>();
         }
 
         /// <summary>
-        /// Resolve local path on HDInsight VM where the ADF .Net activity is running
+        ///     Resolve local path on HDInsight VM where the ADF .Net activity is running
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="args"></param>
@@ -73,7 +72,8 @@ namespace ExecuteRScriptWithCustomActivity
             if (assemblyname.Contains("Microsoft.WindowsAzure.Storage"))
             {
                 assemblyname = "Microsoft.WindowsAzure.Storage";
-                var assemblyFileName = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), assemblyname + ".dll");
+                var assemblyFileName = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location),
+                    assemblyname + ".dll");
                 var assembly = Assembly.LoadFrom(assemblyFileName);
                 return assembly;
             }
@@ -81,7 +81,7 @@ namespace ExecuteRScriptWithCustomActivity
         }
 
         /// <summary>
-        /// Invoke RScript.exe and run the R script
+        ///     Invoke RScript.exe and run the R script
         /// </summary>
         /// <param name="experimentType"></param>
         /// <param name="snapShotFile"></param>
@@ -90,26 +90,15 @@ namespace ExecuteRScriptWithCustomActivity
         /// <param name="blobPath"></param>
         /// <param name="outputFile"></param>
         /// <param name="logger"></param>
-        public static void InvokeR(string usDataFile, string blobPath, string outputFile, IActivityLogger logger)
+        public static void InvokeR(string inputDataFile, string outputBlobPath, string outputFile, IActivityLogger logger)
         {
-
             const string accountName = "labarlaetl";
-            const string accountKey = "";
-            var connectionString = String.Format("DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1}", accountName, accountKey);
+            const string accountKey =
+                "";
+            var connectionString = string.Format("DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1}",
+                accountName, accountKey);
 
             logger.Write("Azure storage connection string {0}", connectionString);
-
-
-            /*    
-                logger.Write("Download and unpack R binaries");
-                string workingDirectory = "C:\\temp\\gert";
-                string containerName = "rbinaries";
-                string blobName = "R-3.3.3.zip";
-
-                DownloadInputFiles(workingDirectory, connectionString, containerName, new String[] { blobName });
-
-                ZipFile.ExtractToDirectory(Path.Combine(workingDirectory, blobName), workingDirectory);
-              */
 
 
             var process = new Process();
@@ -118,28 +107,51 @@ namespace ExecuteRScriptWithCustomActivity
             {
                 string pathToRExecutable;
                 string[] blobNames;
-                const string containerName = "hdiclustertest";
+                const string containerName = "us-sales-kpi";
 
-                pathToRExecutable = "etl.r";
-                blobNames = new[] { pathToRExecutable, usDataFile };
+                pathToRExecutable = "etl.R";
+                blobNames = new[] {pathToRExecutable, inputDataFile };
 
 
-                var resultBlobPath = String.Format("{0}/{1}", containerName, blobPath);
+                var resultBlobPath = string.Format("{0}/{1}", containerName, outputBlobPath);
 
                 logger.Write("Creating working directory");
-                logger.Write(String.Format("Machine Name: {0}", Environment.MachineName));
+                logger.Write(string.Format("Machine Name: {0}", Environment.MachineName));
 
                 var workingDirectory = new FileInfo(typeof(RExecutionActivity).Assembly.Location).DirectoryName;
-                logger.Write(String.Format("Directory Name : {0}", workingDirectory));
+                logger.Write(string.Format("Directory Name : {0}", workingDirectory));
 
-                logger.Write(String.Format("Working directory created: {0}", workingDirectory));
+                logger.Write(string.Format("Working directory created: {0}", workingDirectory));
 
-                //TODO: Fix path to R binary
-                DirectoryCopy(@"C:\apps\dist\R", workingDirectory, true);
 
+                logger.Write("Download and unpack R binaries");
+                var RBinariesContainerName = "rbinaries";
+                var RBinariesBlobName = "R-3.3.3.zip";
+
+                //DownloadInputFiles(workingDirectory, connectionString, RBinariesContainerName, new[] {RBinariesBlobName});
+
+                //var downloadedRBinariesPath = @"C:\temp\custom-activity";
+                //var RBinariesZipFileName = "R-3.3.3.zip";
+                Console.WriteLine("Finished downloading...");
+
+                try
+                {
+                    ZipFile.ExtractToDirectory(Path.Combine(workingDirectory, RBinariesBlobName), workingDirectory);
+
+                }
+                catch (IOException e)
+                {
+                    Console.WriteLine(e.Message);
+                    Console.WriteLine("ignoring");
+                }
+
+                
+                // DirectoryCopy(@"C:\R-3.3.3", workingDirectory, true);
+                
                 logger.Write("Downloading input files used by this sample to the Working Directory");
 
-                var inputFileNames = DownloadInputFiles(workingDirectory, connectionString, resultBlobPath, blobNames);
+                
+                var inputFileNames = DownloadInputFiles(workingDirectory, connectionString, containerName, blobNames);
 
                 var index = 0;
                 for (; index < inputFileNames.Length; index++)
@@ -152,21 +164,32 @@ namespace ExecuteRScriptWithCustomActivity
                 }
 
                 logger.Write("Input Files Download completed");
-
+                
                 //Note this assumes the data, and r etl logic lies in the same container (but different blobs)
                 pathToRExecutable = inputFileNames[0];
-                var usFile = inputFileNames[1];
+                var inputData = inputFileNames[1];
                 
+                
+                //var usFile = "name-of-raw-data-file";
                 string args;
                 var outputFileName = String.Format("{0}\\{1}", workingDirectory, outputFile);
 
                 logger.Write(String.Format("Output file name : {0}", outputFileName));
 
-
-                args = String.Format("{0} {1}", usFile, outputFileName);
+                
+                args = String.Format("{0} {1}", inputData, outputFileName);
                 logger.Write(String.Format("Arguments in training are : {0}", args));
                
+                //Copy R file containing etl logic into working directory
+                //pathToRExecutable = Path.Combine(workingDirectory, "etl.r");
+                //File.Copy(@"C:/Dev/Playground/RWorkspace/CustomRScript\etl.r", pathToRExecutable, overwrite: true);
+                logger.Write(String.Format("R script path: {0} ", pathToRExecutable));
+                //Copy data files into working directory
+                //TODO
 
+
+
+                
                 /////R execution/////
 
                 ProcessStartInfo startInfo = new ProcessStartInfo
@@ -178,11 +201,11 @@ namespace ExecuteRScriptWithCustomActivity
                     CreateNoWindow = true
                 };
 
-                logger.Write(File.Exists(String.Format("{0}{1}", workingDirectory, @"\R-3.2.2\bin\x64\Rscript.exe"))
+                logger.Write(File.Exists(String.Format("{0}{1}", workingDirectory, @"\R-3.3.3\bin\x64\Rscript.exe"))
                     ? "R File exists"
                     : "R file does not exist");
 
-                startInfo.FileName = String.Format("{0}{1}", workingDirectory, @"\R-3.2.2\bin\x64\Rscript.exe");
+                startInfo.FileName = String.Format("{0}{1}", workingDirectory, @"\R-3.3.3\bin\x64\Rscript.exe");
                 startInfo.Arguments = String.Format("{0} {1}", pathToRExecutable, args);
                 if (workingDirectory != null) startInfo.WorkingDirectory = workingDirectory;
                 logger.Write("R Execution started");
@@ -220,7 +243,7 @@ namespace ExecuteRScriptWithCustomActivity
                 }
 
                 logger.Write(String.Format("Process start time : {0}, end time : {1}", process.StartTime, process.ExitTime));
-
+                
                 /////Upload file/////
                 if (File.Exists(outputFileName))
                 {
@@ -232,16 +255,17 @@ namespace ExecuteRScriptWithCustomActivity
                 {
                     logger.Write("output file not found");
                 }
+                
+
             }
             catch (Exception ex)
             {
-                logger.Write(String.Format("Exception is : {0}", ex.Message));
+                logger.Write(string.Format("Exception is : {0}", ex.Message));
             }
-
         }
 
         /// <summary>
-        /// Upload file to  Azure Blob
+        ///     Upload file to  Azure Blob
         /// </summary>
         /// <param name="connectionString"></param>
         /// <param name="containerName"></param>
@@ -259,7 +283,7 @@ namespace ExecuteRScriptWithCustomActivity
         }
 
         /// <summary>
-        /// Download input files from Azure blob
+        ///     Download input files from Azure blob
         /// </summary>
         /// <param name="workingDirectory"></param>
         /// <param name="connectionString"></param>
@@ -294,7 +318,7 @@ namespace ExecuteRScriptWithCustomActivity
         }
 
         /// <summary>
-        /// Copy files from source to destination directory recursively
+        ///     Copy files from source to destination directory recursively
         /// </summary>
         /// <param name="sourceDirName"></param>
         /// <param name="destDirName"></param>
@@ -305,18 +329,14 @@ namespace ExecuteRScriptWithCustomActivity
             var dir = new DirectoryInfo(sourceDirName);
 
             if (!dir.Exists)
-            {
                 throw new DirectoryNotFoundException(
                     "Source directory does not exist or could not be found: "
                     + sourceDirName);
-            }
 
             var dirs = dir.GetDirectories();
             // If the destination directory doesn't exist, create it.
             if (!Directory.Exists(destDirName))
-            {
                 Directory.CreateDirectory(destDirName);
-            }
 
             // Get the files in the directory and copy them to the new location.
             var files = dir.GetFiles();
@@ -334,6 +354,5 @@ namespace ExecuteRScriptWithCustomActivity
                 DirectoryCopy(subdir.FullName, temppath, true);
             }
         }
-
     }
 }
