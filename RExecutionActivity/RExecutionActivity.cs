@@ -7,6 +7,7 @@ using System.Reflection;
 using Microsoft.Azure.Management.DataFactories.Models;
 using Microsoft.Azure.Management.DataFactories.Runtime;
 using Microsoft.WindowsAzure.Storage;
+using System.Linq;
 
 namespace ExecuteRScriptWithCustomActivity
 {
@@ -30,32 +31,47 @@ namespace ExecuteRScriptWithCustomActivity
             var extendedProperties = ((DotNetActivity) activity.TypeProperties).ExtendedProperties;
 
             //These file paths are specific to the R script.  We pass the file paths to our R script as parameters via the pipeline json
-            /*
-            string usDataFile;
-            extendedProperties.TryGetValue("usDataFile", out usDataFile);
 
-
-            string blobPath;
-            extendedProperties.TryGetValue("blobPath", out blobPath);
-            string churnTagFile;
-            extendedProperties.TryGetValue("churnTagFile", out churnTagFile);
+            string inputDataFile;
+            extendedProperties.TryGetValue("inputDataFile", out inputDataFile);
+            string outputBlobPath;
+            extendedProperties.TryGetValue("outputPath", out outputBlobPath);
             string outputFile;
             extendedProperties.TryGetValue("outputFile", out outputFile);
-            */
+            
             // to log information, use the logger object
             // log all extended properties            
             logger.Write("Logging extended properties if any...");
             foreach (var entry in extendedProperties)
                 logger.Write("<key:{0}> <value:{1}>", entry.Key, entry.Value);
 
+            // linked service for input and output data stores
+            // in this example, same storage is used for both input/output
+            AzureStorageLinkedService inputLinkedService;
+            
+            // get the input dataset
+            Dataset inputDataset = datasets.Single(dataset => dataset.Name == activity.Inputs.Single().Name);
 
-            string inputDataFile = "file.txt";
-            string outputBlobPath = "output";
-            string outputFile = "output_from_r.txt";
+            // get the first Azure Storate linked service from linkedServices object
+            // using First method instead of Single since we are using the same
+            // Azure Storage linked service for input and output.
+            inputLinkedService = linkedServices.First(
+                linkedService =>
+                linkedService.Name ==
+                inputDataset.Properties.LinkedServiceName).Properties.TypeProperties
+                as AzureStorageLinkedService;
+
+            // get the connection string in the linked service
+            string connectionString = inputLinkedService.ConnectionString;
+            
+
+            //   string inputDataFile = "file.txt";
+            //   string outputBlobPath = "output";
+            //   string outputFile = "output_from_r.txt";
 
             logger.Write("Starting Batch Execution Service");
 
-            InvokeR(inputDataFile, outputBlobPath, outputFile, logger);
+            InvokeR(connectionString, inputDataFile, outputBlobPath, outputFile, logger);
 
             return new Dictionary<string, string>();
         }
@@ -83,24 +99,14 @@ namespace ExecuteRScriptWithCustomActivity
         /// <summary>
         ///     Invoke RScript.exe and run the R script
         /// </summary>
-        /// <param name="experimentType"></param>
-        /// <param name="snapShotFile"></param>
-        /// <param name="timeSeriesFile"></param>
-        /// <param name="churnTagFile"></param>
+        /// <param name="connectionString"></param>
+        /// <param name="inputDataFile"></param>
         /// <param name="blobPath"></param>
         /// <param name="outputFile"></param>
         /// <param name="logger"></param>
-        public static void InvokeR(string inputDataFile, string outputBlobPath, string outputFile, IActivityLogger logger)
+        public static void InvokeR(string connectionString, string inputDataFile, string outputBlobPath, string outputFile, IActivityLogger logger)
         {
-            const string accountName = "labarlaetl";
-            const string accountKey =
-                "";
-            var connectionString = string.Format("DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1}",
-                accountName, accountKey);
-
-            logger.Write("Azure storage connection string {0}", connectionString);
-
-
+            
             var process = new Process();
 
             try

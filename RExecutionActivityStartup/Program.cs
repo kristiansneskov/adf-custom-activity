@@ -17,8 +17,14 @@ namespace RExecutionActivityStartup
             string outputBlobPath = "output";
             string outputFile = "output_from_r.txt";
             var consoleLogger = new ConsoleLogger();
-            
-            RExecutionActivity.InvokeR(inputDataFile, outputBlobPath, outputFile, consoleLogger);
+            const string accountName = "labarlaetl";
+            const string accountKey =
+                "";
+            var connectionString = string.Format("DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1}",
+                accountName, accountKey);
+
+            consoleLogger.Write("Azure storage connection string {0}", connectionString);
+            RExecutionActivity.InvokeR(connectionString, inputDataFile, outputBlobPath, outputFile, consoleLogger);
             Console.WriteLine("All done");
             Console.ReadLine();
         }
