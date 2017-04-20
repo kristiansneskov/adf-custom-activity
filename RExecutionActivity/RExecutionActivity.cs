@@ -128,7 +128,7 @@ namespace ExecuteRScriptWithCustomActivity
                 var RBinariesContainerName = "rbinaries";
                 var RBinariesBlobName = "R-3.3.3.zip";
 
-                //DownloadInputFiles(workingDirectory, connectionString, RBinariesContainerName, new[] {RBinariesBlobName});
+                DownloadInputFiles(workingDirectory, connectionString, RBinariesContainerName, new[] {RBinariesBlobName});
 
                 //var downloadedRBinariesPath = @"C:\temp\custom-activity";
                 //var RBinariesZipFileName = "R-3.3.3.zip";
