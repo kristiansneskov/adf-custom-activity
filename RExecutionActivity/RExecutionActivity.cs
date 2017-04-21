@@ -8,6 +8,7 @@ using Microsoft.Azure.Management.DataFactories.Models;
 using Microsoft.Azure.Management.DataFactories.Runtime;
 using Microsoft.WindowsAzure.Storage;
 using System.Linq;
+using Microsoft.WindowsAzure.Storage.Blob;
 
 namespace ExecuteRScriptWithCustomActivity
 {
@@ -34,11 +35,16 @@ namespace ExecuteRScriptWithCustomActivity
 
             string inputDataFile;
             extendedProperties.TryGetValue("inputDataFile", out inputDataFile);
+
             string outputBlobPath;
             extendedProperties.TryGetValue("outputPath", out outputBlobPath);
-            string outputFile;
-            extendedProperties.TryGetValue("outputFile", out outputFile);
-            
+            string dailyOutputFileName;
+            extendedProperties.TryGetValue("dailyFileName", out dailyOutputFileName);
+            string monthlyOutputFileName;
+            extendedProperties.TryGetValue("monthlyFileName", out monthlyOutputFileName);
+            string rscriptPath;
+            extendedProperties.TryGetValue("rScript", out rscriptPath);
+
             // to log information, use the logger object
             // log all extended properties            
             logger.Write("Logging extended properties if any...");
@@ -52,6 +58,11 @@ namespace ExecuteRScriptWithCustomActivity
             // get the input dataset
             Dataset inputDataset = datasets.Single(dataset => dataset.Name == activity.Inputs.Single().Name);
 
+            //Get the folder path from the input data set definition
+            string folderPath = GetFolderPath(inputDataset);
+
+            logger.Write("The detected folder path: {0}", folderPath);
+
             // get the first Azure Storate linked service from linkedServices object
             // using First method instead of Single since we are using the same
             // Azure Storage linked service for input and output.
@@ -64,14 +75,13 @@ namespace ExecuteRScriptWithCustomActivity
             // get the connection string in the linked service
             string connectionString = inputLinkedService.ConnectionString;
             
-
             //   string inputDataFile = "file.txt";
             //   string outputBlobPath = "output";
             //   string outputFile = "output_from_r.txt";
 
             logger.Write("Starting Batch Execution Service");
 
-            InvokeR(connectionString, inputDataFile, outputBlobPath, outputFile, logger);
+            InvokeR(connectionString, inputDataFile, outputBlobPath, dailyOutputFileName, monthlyOutputFileName, rscriptPath, logger);
 
             return new Dictionary<string, string>();
         }
@@ -104,19 +114,19 @@ namespace ExecuteRScriptWithCustomActivity
         /// <param name="blobPath"></param>
         /// <param name="outputFile"></param>
         /// <param name="logger"></param>
-        public static void InvokeR(string connectionString, string inputDataFile, string outputBlobPath, string outputFile, IActivityLogger logger)
+        public static void InvokeR(string connectionString, string inputDataFile, string outputBlobPath, string dailyOutputFileName, string monthlyOutputFileName, string rScriptName, IActivityLogger logger)
         {
             
             var process = new Process();
 
             try
             {
-                string pathToRExecutable;
+//                string pathToRExecutable;
                 string[] blobNames;
                 const string containerName = "us-sales-kpi";
 
-                pathToRExecutable = "etl.R";
-                blobNames = new[] {pathToRExecutable, inputDataFile };
+              //  pathToRExecutable = "etl.R";
+                blobNames = new[] { rScriptName, inputDataFile };
 
 
                 var resultBlobPath = string.Format("{0}/{1}", containerName, outputBlobPath);
@@ -134,7 +144,7 @@ namespace ExecuteRScriptWithCustomActivity
                 var RBinariesContainerName = "rbinaries";
                 var RBinariesBlobName = "R-3.3.3.zip";
 
-                DownloadInputFiles(workingDirectory, connectionString, RBinariesContainerName, new[] {RBinariesBlobName});
+                DownloadInputFiles(workingDirectory, connectionString, RBinariesContainerName, new[] {RBinariesBlobName}, logger);
 
                 //var downloadedRBinariesPath = @"C:\temp\custom-activity";
                 //var RBinariesZipFileName = "R-3.3.3.zip";
@@ -157,7 +167,7 @@ namespace ExecuteRScriptWithCustomActivity
                 logger.Write("Downloading input files used by this sample to the Working Directory");
 
                 
-                var inputFileNames = DownloadInputFiles(workingDirectory, connectionString, containerName, blobNames);
+                var inputFileNames = DownloadInputFiles(workingDirectory, connectionString, containerName, blobNames, logger);
 
                 var index = 0;
                 for (; index < inputFileNames.Length; index++)
@@ -172,24 +182,29 @@ namespace ExecuteRScriptWithCustomActivity
                 logger.Write("Input Files Download completed");
                 
                 //Note this assumes the data, and r etl logic lies in the same container (but different blobs)
-                pathToRExecutable = inputFileNames[0];
-                var inputData = inputFileNames[1];
+                string pathToRScript = inputFileNames[0];
+             //   var inputData = inputFileNames[1];
                 
                 
                 //var usFile = "name-of-raw-data-file";
                 string args;
-                var outputFileName = String.Format("{0}\\{1}", workingDirectory, outputFile);
+                var dailyOutputPath = String.Format("{0}\\{1}", workingDirectory, dailyOutputFileName);
+                var monthlyOutputPath = String.Format("{0}\\{1}", workingDirectory, monthlyOutputFileName);
 
-                logger.Write(String.Format("Output file name : {0}", outputFileName));
 
-                
-                args = String.Format("{0} {1}", inputData, outputFileName);
-                logger.Write(String.Format("Arguments in training are : {0}", args));
+                logger.Write(String.Format("Daily output file name : {0}", dailyOutputPath));
+                logger.Write(String.Format("¨Monthly output file name : {0}", monthlyOutputPath));
+
+
+
+                args = String.Format("{0} {1} {2}", workingDirectory, dailyOutputPath, monthlyOutputPath);
+                logger.Write(String.Format("Arguments in etl are : {0}", args));
                
                 //Copy R file containing etl logic into working directory
                 //pathToRExecutable = Path.Combine(workingDirectory, "etl.r");
                 //File.Copy(@"C:/Dev/Playground/RWorkspace/CustomRScript\etl.r", pathToRExecutable, overwrite: true);
-                logger.Write(String.Format("R script path: {0} ", pathToRExecutable));
+                logger.Write(String.Format("R script path: {0} ", pathToRScript));
+                
                 //Copy data files into working directory
                 //TODO
 
@@ -212,7 +227,7 @@ namespace ExecuteRScriptWithCustomActivity
                     : "R file does not exist");
 
                 startInfo.FileName = String.Format("{0}{1}", workingDirectory, @"\R-3.3.3\bin\x64\Rscript.exe");
-                startInfo.Arguments = String.Format("{0} {1}", pathToRExecutable, args);
+                startInfo.Arguments = String.Format("{0} {1}", pathToRScript, args);
                 if (workingDirectory != null) startInfo.WorkingDirectory = workingDirectory;
                 logger.Write("R Execution started");
                 process.StartInfo = startInfo;
@@ -251,17 +266,30 @@ namespace ExecuteRScriptWithCustomActivity
                 logger.Write(String.Format("Process start time : {0}, end time : {1}", process.StartTime, process.ExitTime));
                 
                 /////Upload file/////
-                if (File.Exists(outputFileName))
+                if (File.Exists(dailyOutputPath))
                 {
-                    logger.Write("Uploading file started");
+                    logger.Write("Uploading daily file started");
 
-                    UploadFile(connectionString, resultBlobPath, outputFileName, outputFile);
+                    UploadFile(connectionString, resultBlobPath, dailyOutputPath, dailyOutputFileName);
                 }
                 else
                 {
-                    logger.Write("output file not found");
+                    logger.Write("daily output file not found");
                 }
-                
+
+
+                /////Upload file/////
+                if (File.Exists(monthlyOutputPath))
+                {
+                    logger.Write("Uploading monthly file started");
+
+                    UploadFile(connectionString, resultBlobPath, monthlyOutputPath, monthlyOutputFileName);
+                }
+                else
+                {
+                    logger.Write("monthly output file not found");
+                }
+
 
             }
             catch (Exception ex)
@@ -297,13 +325,20 @@ namespace ExecuteRScriptWithCustomActivity
         /// <param name="blobNames"></param>
         /// <returns></returns>
         private static string[] DownloadInputFiles(string workingDirectory, string connectionString,
-            string containerName, string[] blobNames)
+            string containerName, string[] blobNames, IActivityLogger logger)
         {
             var inputStorageAccount =
                 CloudStorageAccount.Parse(connectionString);
             var inputClient = inputStorageAccount.CreateCloudBlobClient();
             var container = inputClient.GetContainerReference(containerName);
             var inputFiles = new string[blobNames.Length];
+
+            IEnumerable<IListBlobItem> blobs = container.ListBlobs();
+            //TODO: Download all these blobs
+            foreach(var b in blobs)
+            {
+                logger.Write(String.Format(b.Uri.ToString()));
+            }
 
             for (var blobCnt = 0; blobCnt < blobNames.Length; blobCnt++)
             {
@@ -321,6 +356,28 @@ namespace ExecuteRScriptWithCustomActivity
             }
 
             return inputFiles;
+        }
+
+        /// <summary>
+        /// Gets the folderPath value from the input/output dataset.
+        /// </summary>
+
+        private static string GetFolderPath(Dataset dataArtifact)
+        {
+            if (dataArtifact == null || dataArtifact.Properties == null)
+            {
+                return null;
+            }
+
+            // get type properties of the dataset   
+            AzureBlobDataset blobDataset = dataArtifact.Properties.TypeProperties as AzureBlobDataset;
+            if (blobDataset == null)
+            {
+                return null;
+            }
+
+            // return the folder path found in the type properties
+            return blobDataset.FolderPath;
         }
 
         /// <summary>

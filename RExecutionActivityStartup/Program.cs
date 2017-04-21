@@ -15,7 +15,10 @@ namespace RExecutionActivityStartup
 
             string inputDataFile = "file.txt";
             string outputBlobPath = "output";
-            string outputFile = "output_from_r.txt";
+            string outputFile1 = "output_from_r.txt";
+            string outputFile2 = "output_from_r.txt";
+            string rScriptName = "hello.R";
+
             var consoleLogger = new ConsoleLogger();
             const string accountName = "labarlaetl";
             const string accountKey =
@@ -24,7 +27,7 @@ namespace RExecutionActivityStartup
                 accountName, accountKey);
 
             consoleLogger.Write("Azure storage connection string {0}", connectionString);
-            RExecutionActivity.InvokeR(connectionString, inputDataFile, outputBlobPath, outputFile, consoleLogger);
+            RExecutionActivity.InvokeR(connectionString, inputDataFile, outputBlobPath, outputFile1, outputFile2, rScriptName, consoleLogger);
             Console.WriteLine("All done");
             Console.ReadLine();
         }
