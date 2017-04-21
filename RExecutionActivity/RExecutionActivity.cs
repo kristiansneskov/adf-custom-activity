@@ -75,10 +75,6 @@ namespace ExecuteRScriptWithCustomActivity
             // get the connection string in the linked service
             string connectionString = inputLinkedService.ConnectionString;
             
-            //   string inputDataFile = "file.txt";
-            //   string outputBlobPath = "output";
-            //   string outputFile = "output_from_r.txt";
-
             logger.Write("Starting Batch Execution Service");
 
             InvokeR(connectionString, inputDataFile, outputBlobPath, dailyOutputFileName, monthlyOutputFileName, rscriptPath, logger);
@@ -131,7 +127,7 @@ namespace ExecuteRScriptWithCustomActivity
 
                 var resultBlobPath = string.Format("{0}/{1}", containerName, outputBlobPath);
 
-                logger.Write("Creating working directory");
+                logger.Write("Getting working directory");
                 logger.Write(string.Format("Machine Name: {0}", Environment.MachineName));
 
                 var workingDirectory = new FileInfo(typeof(RExecutionActivity).Assembly.Location).DirectoryName;
@@ -146,8 +142,6 @@ namespace ExecuteRScriptWithCustomActivity
 
                 DownloadInputFiles(workingDirectory, connectionString, RBinariesContainerName, new[] {RBinariesBlobName}, logger);
 
-                //var downloadedRBinariesPath = @"C:\temp\custom-activity";
-                //var RBinariesZipFileName = "R-3.3.3.zip";
                 Console.WriteLine("Finished downloading...");
 
                 try
@@ -160,9 +154,6 @@ namespace ExecuteRScriptWithCustomActivity
                     Console.WriteLine(e.Message);
                     Console.WriteLine("ignoring");
                 }
-
-                
-                // DirectoryCopy(@"C:\R-3.3.3", workingDirectory, true);
                 
                 logger.Write("Downloading input files used by this sample to the Working Directory");
 
@@ -185,8 +176,6 @@ namespace ExecuteRScriptWithCustomActivity
                 string pathToRScript = inputFileNames[0];
              //   var inputData = inputFileNames[1];
                 
-                
-                //var usFile = "name-of-raw-data-file";
                 string args;
                 var dailyOutputPath = String.Format("{0}\\{1}", workingDirectory, dailyOutputFileName);
                 var monthlyOutputPath = String.Format("{0}\\{1}", workingDirectory, monthlyOutputFileName);
@@ -333,12 +322,7 @@ namespace ExecuteRScriptWithCustomActivity
             var container = inputClient.GetContainerReference(containerName);
             var inputFiles = new string[blobNames.Length];
 
-            IEnumerable<IListBlobItem> blobs = container.ListBlobs();
-            //TODO: Download all these blobs
-            foreach(var b in blobs)
-            {
-                logger.Write(String.Format(b.Uri.ToString()));
-            }
+            logger.Write("Starting to download");
 
             for (var blobCnt = 0; blobCnt < blobNames.Length; blobCnt++)
             {

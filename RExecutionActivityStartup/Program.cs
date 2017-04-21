@@ -17,7 +17,7 @@ namespace RExecutionActivityStartup
             string outputBlobPath = "output";
             string outputFile1 = "output_from_r.txt";
             string outputFile2 = "output_from_r.txt";
-            string rScriptName = "hello.R";
+            string rScriptName = "etl.R";
 
             var consoleLogger = new ConsoleLogger();
             const string accountName = "labarlaetl";
