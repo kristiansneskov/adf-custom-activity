@@ -34,7 +34,7 @@ namespace ExecuteRScriptWithCustomActivity
             //These file paths are specific to the R script.  We pass the file paths to our R script as parameters via the pipeline json
 
             string inputDataFile;
-            extendedProperties.TryGetValue("inputDataFile", out inputDataFile);
+            extendedProperties.TryGetValue("inputData", out inputDataFile);
 
             string outputBlobPath;
             extendedProperties.TryGetValue("outputPath", out outputBlobPath);
