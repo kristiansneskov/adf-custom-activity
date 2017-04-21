@@ -59,9 +59,9 @@ namespace ExecuteRScriptWithCustomActivity
             Dataset inputDataset = datasets.Single(dataset => dataset.Name == activity.Inputs.Single().Name);
 
             //Get the folder path from the input data set definition
-            string folderPath = GetFolderPath(inputDataset);
+//            string folderPath = GetFolderPath(inputDataset);
 
-            logger.Write("The detected folder path: {0}", folderPath);
+  //          logger.Write("The detected folder path: {0}", folderPath);
 
             // get the first Azure Storate linked service from linkedServices object
             // using First method instead of Single since we are using the same
@@ -117,7 +117,6 @@ namespace ExecuteRScriptWithCustomActivity
 
             try
             {
-//                string pathToRExecutable;
                 string[] blobNames;
                 const string containerName = "us-sales-kpi";
 
@@ -135,40 +134,7 @@ namespace ExecuteRScriptWithCustomActivity
 
                 logger.Write(string.Format("Working directory created: {0}", workingDirectory));
 
-
-                logger.Write("Download and unpack R binaries");
-                var RBinariesContainerName = "rbinaries";
-                var RBinariesBlobName = "R-3.3.3.zip";
-
-                DownloadInputFiles(workingDirectory, connectionString, RBinariesContainerName, new[] {RBinariesBlobName}, logger);
-
-                Console.WriteLine("Finished downloading...");
-
-                try
-                {
-                    ZipFile.ExtractToDirectory(Path.Combine(workingDirectory, RBinariesBlobName), workingDirectory);
-
-                }
-                catch (IOException e)
-                {
-                    Console.WriteLine(e.Message);
-                    Console.WriteLine("ignoring");
-                }
-                
-                logger.Write("Downloading input files used by this sample to the Working Directory");
-
-                
-                var inputFileNames = DownloadInputFiles(workingDirectory, connectionString, containerName, blobNames, logger);
-
-                var index = 0;
-                for (; index < inputFileNames.Length; index++)
-                {
-                    var file = inputFileNames[index];
-                    if (File.Exists(file))
-                    {
-                        logger.Write(String.Format("File : {0} exists", file));
-                    }
-                }
+                string[] inputFileNames = DownloadAllInputFiles(logger, workingDirectory, connectionString, containerName, blobNames);
 
                 logger.Write("Input Files Download completed");
                 
@@ -189,17 +155,9 @@ namespace ExecuteRScriptWithCustomActivity
                 args = String.Format("{0} {1} {2}", workingDirectory, dailyOutputPath, monthlyOutputPath);
                 logger.Write(String.Format("Arguments in etl are : {0}", args));
                
-                //Copy R file containing etl logic into working directory
-                //pathToRExecutable = Path.Combine(workingDirectory, "etl.r");
-                //File.Copy(@"C:/Dev/Playground/RWorkspace/CustomRScript\etl.r", pathToRExecutable, overwrite: true);
                 logger.Write(String.Format("R script path: {0} ", pathToRScript));
                 
-                //Copy data files into working directory
-                //TODO
-
-
-
-                
+           
                 /////R execution/////
 
                 ProcessStartInfo startInfo = new ProcessStartInfo
@@ -284,6 +242,50 @@ namespace ExecuteRScriptWithCustomActivity
             catch (Exception ex)
             {
                 logger.Write(string.Format("Exception is : {0}", ex.Message));
+            }
+        }
+
+        private static string[] DownloadAllInputFiles(IActivityLogger logger, string workingDirectory, string connectionString, string containerName, string[] blobNames)
+        {
+
+            //Download input files
+            DownloadAndUnpackFiles(logger, workingDirectory, connectionString, "rbinaries", "R-3.3.3.zip");
+
+            logger.Write("Downloading input files used by this sample to the Working Directory");
+
+
+            var inputFileNames = DownloadInputFiles(workingDirectory, connectionString, containerName, blobNames, logger);
+
+            var index = 0;
+            for (; index < inputFileNames.Length; index++)
+            {
+                var file = inputFileNames[index];
+                if (File.Exists(file))
+                {
+                    logger.Write(String.Format("File : {0} exists", file));
+                }
+            }
+            return inputFileNames;
+        }
+
+        private static void DownloadAndUnpackFiles(IActivityLogger logger, string workingDirectory, string connectionString, string containerName, string blobName)
+        {
+            logger.Write("Download and unpack R binaries");
+
+
+            DownloadInputFiles(workingDirectory, connectionString, containerName, new[] { blobName }, logger);
+
+            Console.WriteLine("Finished downloading...");
+
+            try
+            {
+                ZipFile.ExtractToDirectory(Path.Combine(workingDirectory, blobName), workingDirectory);
+
+            }
+            catch (IOException e)
+            {
+                //Just swallow it for now - its probably an indication you are running locally and reusing a workspace
+                Console.WriteLine(e.Message);
             }
         }
 
