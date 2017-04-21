@@ -33,8 +33,10 @@ namespace ExecuteRScriptWithCustomActivity
 
             //These file paths are specific to the R script.  We pass the file paths to our R script as parameters via the pipeline json
 
-            string inputDataFile;
-            extendedProperties.TryGetValue("inputData", out inputDataFile);
+            string orderData;
+            extendedProperties.TryGetValue("orderData", out orderData);
+            string dayDimData;
+            extendedProperties.TryGetValue("dayDimData", out dayDimData);
 
             string outputBlobPath;
             extendedProperties.TryGetValue("outputPath", out outputBlobPath);
@@ -77,7 +79,9 @@ namespace ExecuteRScriptWithCustomActivity
             
             logger.Write("Starting Batch Execution Service");
 
-            InvokeR(connectionString, inputDataFile, outputBlobPath, dailyOutputFileName, monthlyOutputFileName, rscriptPath, logger);
+            string[] blobNames = new[] { rscriptPath, orderData, dayDimData };
+
+            InvokeR(connectionString, blobNames, outputBlobPath, dailyOutputFileName, monthlyOutputFileName, logger);
 
             return new Dictionary<string, string>();
         }
@@ -110,19 +114,16 @@ namespace ExecuteRScriptWithCustomActivity
         /// <param name="blobPath"></param>
         /// <param name="outputFile"></param>
         /// <param name="logger"></param>
-        public static void InvokeR(string connectionString, string inputDataFile, string outputBlobPath, string dailyOutputFileName, string monthlyOutputFileName, string rScriptName, IActivityLogger logger)
+        public static void InvokeR(string connectionString, string[] blobNames, string outputBlobPath, string dailyOutputFileName, string monthlyOutputFileName, IActivityLogger logger)
         {
             
             var process = new Process();
 
             try
             {
-                string[] blobNames;
+              
                 const string containerName = "us-sales-kpi";
-
-              //  pathToRExecutable = "etl.R";
-                blobNames = new[] { rScriptName, inputDataFile };
-
+                
 
                 var resultBlobPath = string.Format("{0}/{1}", containerName, outputBlobPath);
 
