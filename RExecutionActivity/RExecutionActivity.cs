@@ -48,8 +48,6 @@ namespace ExecuteRScriptWithCustomActivity
             extendedProperties.TryGetValue("rHelper1", out rHelper1);
             string rHelper2;
             extendedProperties.TryGetValue("rHelper2", out rHelper2);
-            string outputBlobPath;
-            extendedProperties.TryGetValue("outputPath", out outputBlobPath);
             string dailyOutputFileName;
             extendedProperties.TryGetValue("dailyFileName", out dailyOutputFileName);
             string monthlyOutputFileName;
@@ -71,10 +69,14 @@ namespace ExecuteRScriptWithCustomActivity
             Dataset inputDataset = datasets.Single(dataset => dataset.Name == activity.Inputs.Single().Name);
 
             //Get the folder path from the input data set definition
-//            string folderPath = GetFolderPath(inputDataset);
+            string inputBlobPath = GetFolderPath(inputDataset);
+            
+            // get the output dataset
+            Dataset outputDataset = datasets.Single(dataset => dataset.Name == activity.Outputs.Single().Name);
 
-  //          logger.Write("The detected folder path: {0}", folderPath);
-
+            //Get the folder path from the input data set definition
+            string outputBlobPath = GetFolderPath(outputDataset);
+  
             // get the first Azure Storate linked service from linkedServices object
             // using First method instead of Single since we are using the same
             // Azure Storage linked service for input and output.
@@ -91,7 +93,7 @@ namespace ExecuteRScriptWithCustomActivity
 
             string[] blobNames = new[] { rscriptPath, orderData, currencyData, forecastSalesData, dayDimData, fiscalDimData, rHelper1, rHelper2 };
 
-            InvokeR(connectionString, blobNames, outputBlobPath, dailyOutputFileName, monthlyOutputFileName, logger);
+            InvokeR(connectionString, inputBlobPath, blobNames, outputBlobPath, dailyOutputFileName, monthlyOutputFileName, logger);
 
             return new Dictionary<string, string>();
         }
@@ -120,11 +122,12 @@ namespace ExecuteRScriptWithCustomActivity
         ///     Invoke RScript.exe and run the R script
         /// </summary>
         /// <param name="connectionString"></param>
-        /// <param name="inputDataFile"></param>
-        /// <param name="blobPath"></param>
-        /// <param name="outputFile"></param>
+        /// <param name="blobNames"></param>
+        /// <param name="outputBlobPath"></param>
+        /// <param name="dailyOutputFileName"></param>
+        /// <param name="monthlyOutputFileName"></param>
         /// <param name="logger"></param>
-        public static void InvokeR(string connectionString, string[] blobNames, string outputBlobPath,
+        public static void InvokeR(string connectionString, string inputBlobPath, string[] blobNames, string outputBlobPath,
             string dailyOutputFileName, string monthlyOutputFileName, IActivityLogger logger)
         {
 
@@ -132,22 +135,16 @@ namespace ExecuteRScriptWithCustomActivity
             {
                 try
                 {
-
-                    const string containerName = "us-sales-kpi";
-
-
-                    var resultBlobPath = string.Format("{0}/{1}", containerName, outputBlobPath);
-
-                    logger.Write("Getting working directory");
+                    
                     logger.Write(string.Format("Machine Name: {0}", Environment.MachineName));
 
                     var workingDirectory = new FileInfo(typeof(RExecutionActivity).Assembly.Location).DirectoryName;
                     logger.Write(string.Format("Directory Name : {0}", workingDirectory));
 
-                    logger.Write(string.Format("Working directory created: {0}", workingDirectory));
+                    logger.Write(string.Format("Working directory detected: {0}", workingDirectory));
 
                     string[] inputFileNames = DownloadAllInputFiles(logger, workingDirectory, connectionString,
-                        containerName, blobNames);
+                        inputBlobPath, blobNames);
 
                     logger.Write("Input Files Download completed");
 
@@ -180,7 +177,7 @@ namespace ExecuteRScriptWithCustomActivity
                     {
                         logger.Write("Uploading daily file started");
 
-                        UploadFile(connectionString, resultBlobPath, dailyOutputPath, dailyOutputFileName);
+                        UploadFile(connectionString, outputBlobPath, dailyOutputPath, dailyOutputFileName);
                     }
                     else
                     {
@@ -193,7 +190,7 @@ namespace ExecuteRScriptWithCustomActivity
                     {
                         logger.Write("Uploading monthly file started");
 
-                        UploadFile(connectionString, resultBlobPath, monthlyOutputPath, monthlyOutputFileName);
+                        UploadFile(connectionString, outputBlobPath, monthlyOutputPath, monthlyOutputFileName);
                     }
                     else
                     {

@@ -14,7 +14,8 @@ namespace RExecutionActivityStartup
             Console.WriteLine("Starting app");
 
             string inputDataFile = "file.txt";
-            string outputBlobPath = "output";
+            string outputBlobPath = "us-sales-kpi/output";
+            string inputBlobPath = "us-sales-kpi";
             string outputFile1 = "output_from_r.txt";
             string outputFile2 = "output_from_r.txt";
             string rScriptName = "etl.R";
@@ -29,7 +30,7 @@ namespace RExecutionActivityStartup
             consoleLogger.Write("Azure storage connection string {0}", connectionString);
 
             string[] blobNames = new[] { rScriptName, inputDataFile };
-            RExecutionActivity.InvokeR(connectionString, blobNames, outputBlobPath, outputFile1, outputFile2, consoleLogger);
+            RExecutionActivity.InvokeR(connectionString,  inputBlobPath, blobNames, outputBlobPath, outputFile1, outputFile2, consoleLogger);
             Console.WriteLine("All done");
             Console.ReadLine();
         }
