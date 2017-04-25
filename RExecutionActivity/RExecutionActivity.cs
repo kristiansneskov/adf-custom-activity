@@ -9,6 +9,7 @@ using Microsoft.Azure.Management.DataFactories.Runtime;
 using Microsoft.WindowsAzure.Storage;
 using System.Linq;
 using Microsoft.WindowsAzure.Storage.Blob;
+using Activity = Microsoft.Azure.Management.DataFactories.Models.Activity;
 
 namespace ExecuteRScriptWithCustomActivity
 {
@@ -35,9 +36,18 @@ namespace ExecuteRScriptWithCustomActivity
 
             string orderData;
             extendedProperties.TryGetValue("orderData", out orderData);
+            string currencyData;
+            extendedProperties.TryGetValue("currencyData", out currencyData);
+            string forecastSalesData;
+            extendedProperties.TryGetValue("forecastSalesData", out forecastSalesData);
+            string fiscalDimData;
+            extendedProperties.TryGetValue("fiscalDimData", out fiscalDimData);
             string dayDimData;
             extendedProperties.TryGetValue("dayDimData", out dayDimData);
-
+            string rHelper1;
+            extendedProperties.TryGetValue("rHelper1", out rHelper1);
+            string rHelper2;
+            extendedProperties.TryGetValue("rHelper2", out rHelper2);
             string outputBlobPath;
             extendedProperties.TryGetValue("outputPath", out outputBlobPath);
             string dailyOutputFileName;
@@ -79,7 +89,7 @@ namespace ExecuteRScriptWithCustomActivity
             
             logger.Write("Starting Batch Execution Service");
 
-            string[] blobNames = new[] { rscriptPath, orderData, dayDimData };
+            string[] blobNames = new[] { rscriptPath, orderData, currencyData, forecastSalesData, dayDimData, fiscalDimData, rHelper1, rHelper2 };
 
             InvokeR(connectionString, blobNames, outputBlobPath, dailyOutputFileName, monthlyOutputFileName, logger);
 
@@ -114,136 +124,154 @@ namespace ExecuteRScriptWithCustomActivity
         /// <param name="blobPath"></param>
         /// <param name="outputFile"></param>
         /// <param name="logger"></param>
-        public static void InvokeR(string connectionString, string[] blobNames, string outputBlobPath, string dailyOutputFileName, string monthlyOutputFileName, IActivityLogger logger)
+        public static void InvokeR(string connectionString, string[] blobNames, string outputBlobPath,
+            string dailyOutputFileName, string monthlyOutputFileName, IActivityLogger logger)
         {
-            
-            var process = new Process();
 
-            try
+            using (var process = new Process())
             {
-              
-                const string containerName = "us-sales-kpi";
-                
-
-                var resultBlobPath = string.Format("{0}/{1}", containerName, outputBlobPath);
-
-                logger.Write("Getting working directory");
-                logger.Write(string.Format("Machine Name: {0}", Environment.MachineName));
-
-                var workingDirectory = new FileInfo(typeof(RExecutionActivity).Assembly.Location).DirectoryName;
-                logger.Write(string.Format("Directory Name : {0}", workingDirectory));
-
-                logger.Write(string.Format("Working directory created: {0}", workingDirectory));
-
-                string[] inputFileNames = DownloadAllInputFiles(logger, workingDirectory, connectionString, containerName, blobNames);
-
-                logger.Write("Input Files Download completed");
-                
-                //Note this assumes the data, and r etl logic lies in the same container (but different blobs)
-                string pathToRScript = inputFileNames[0];
-             //   var inputData = inputFileNames[1];
-                
-                string args;
-                var dailyOutputPath = String.Format("{0}\\{1}", workingDirectory, dailyOutputFileName);
-                var monthlyOutputPath = String.Format("{0}\\{1}", workingDirectory, monthlyOutputFileName);
-
-
-                logger.Write(String.Format("Daily output file name : {0}", dailyOutputPath));
-                logger.Write(String.Format("¨Monthly output file name : {0}", monthlyOutputPath));
-
-
-
-                args = String.Format("{0} {1} {2}", workingDirectory, dailyOutputPath, monthlyOutputPath);
-                logger.Write(String.Format("Arguments in etl are : {0}", args));
-               
-                logger.Write(String.Format("R script path: {0} ", pathToRScript));
-                
-           
-                /////R execution/////
-
-                ProcessStartInfo startInfo = new ProcessStartInfo
+                try
                 {
-                    WindowStyle = ProcessWindowStyle.Hidden,
-                    UseShellExecute = false,
-                    RedirectStandardError = true,
-                    RedirectStandardOutput = true,
-                    CreateNoWindow = true
-                };
 
-                logger.Write(File.Exists(String.Format("{0}{1}", workingDirectory, @"\R-3.3.3\bin\x64\Rscript.exe"))
-                    ? "R File exists"
-                    : "R file does not exist");
+                    const string containerName = "us-sales-kpi";
 
-                startInfo.FileName = String.Format("{0}{1}", workingDirectory, @"\R-3.3.3\bin\x64\Rscript.exe");
-                startInfo.Arguments = String.Format("{0} {1}", pathToRScript, args);
-                if (workingDirectory != null) startInfo.WorkingDirectory = workingDirectory;
-                logger.Write("R Execution started");
-                process.StartInfo = startInfo;
-                process.Start();
 
-                logger.Write(String.Format("Process started with process id : {0} on machine : {1}", process.Id, process.MachineName));
+                    var resultBlobPath = string.Format("{0}/{1}", containerName, outputBlobPath);
 
-                var errorReader = process.StandardError;
-                var outputReader = process.StandardOutput;
+                    logger.Write("Getting working directory");
+                    logger.Write(string.Format("Machine Name: {0}", Environment.MachineName));
 
-                while (!outputReader.EndOfStream)
-                {
-                    var text = outputReader.ReadLine();
-                    logger.Write(text);
+                    var workingDirectory = new FileInfo(typeof(RExecutionActivity).Assembly.Location).DirectoryName;
+                    logger.Write(string.Format("Directory Name : {0}", workingDirectory));
+
+                    logger.Write(string.Format("Working directory created: {0}", workingDirectory));
+
+                    string[] inputFileNames = DownloadAllInputFiles(logger, workingDirectory, connectionString,
+                        containerName, blobNames);
+
+                    logger.Write("Input Files Download completed");
+
+                    //Note this assumes the data, and r etl logic lies in the same container (but different blobs)
+                    string pathToRScript = inputFileNames[0];
+                    //   var inputData = inputFileNames[1];
+
+                    string args;
+                    var dailyOutputPath = String.Format("{0}\\{1}", workingDirectory, dailyOutputFileName);
+                    var monthlyOutputPath = String.Format("{0}\\{1}", workingDirectory, monthlyOutputFileName);
+
+
+                    logger.Write(String.Format("Daily output file name : {0}", dailyOutputPath));
+                    logger.Write(String.Format("¨Monthly output file name : {0}", monthlyOutputPath));
+
+
+
+                    args = String.Format("{0} {1} {2}", workingDirectory, dailyOutputPath, monthlyOutputPath);
+                    logger.Write(String.Format("Arguments in etl are : {0}", args));
+
+                    logger.Write(String.Format("R script path: {0} ", pathToRScript));
+
+
+                    /////R execution/////
+                    ExecuteRProcess(logger, workingDirectory, pathToRScript, args, process);
+
+
+                    /////Upload file/////
+                    if (File.Exists(dailyOutputPath))
+                    {
+                        logger.Write("Uploading daily file started");
+
+                        UploadFile(connectionString, resultBlobPath, dailyOutputPath, dailyOutputFileName);
+                    }
+                    else
+                    {
+                        logger.Write("daily output file not found");
+                    }
+
+
+                    /////Upload file/////
+                    if (File.Exists(monthlyOutputPath))
+                    {
+                        logger.Write("Uploading monthly file started");
+
+                        UploadFile(connectionString, resultBlobPath, monthlyOutputPath, monthlyOutputFileName);
+                    }
+                    else
+                    {
+                        logger.Write("monthly output file not found");
+                    }
+
+
                 }
-
-                logger.Write("output reader complete");
-
-                while (!errorReader.EndOfStream)
+                catch (ETLException ex)
                 {
-                    errorReader.ReadLine();
+                    logger.Write("Detected ETL error in R code:");
+                    logger.Write(ex.Message);
+                    throw ex;
                 }
-
-                logger.Write(String.Format("Standard Output : {0}", process.StandardOutput.ReadToEnd()));
-                logger.Write(String.Format("Standard Error: {0}", process.StandardError.ReadToEnd()));
-
-                logger.Write("output reader end of stream complete");
-
-                process.WaitForExit();
-
-                while (!process.HasExited)
+                catch (Exception ex)
                 {
-                    logger.Write("R is still running");
+                    logger.Write(string.Format("Exception is : {0}", ex.Message));
                 }
-
-                logger.Write(String.Format("Process start time : {0}, end time : {1}", process.StartTime, process.ExitTime));
-                
-                /////Upload file/////
-                if (File.Exists(dailyOutputPath))
-                {
-                    logger.Write("Uploading daily file started");
-
-                    UploadFile(connectionString, resultBlobPath, dailyOutputPath, dailyOutputFileName);
-                }
-                else
-                {
-                    logger.Write("daily output file not found");
-                }
-
-
-                /////Upload file/////
-                if (File.Exists(monthlyOutputPath))
-                {
-                    logger.Write("Uploading monthly file started");
-
-                    UploadFile(connectionString, resultBlobPath, monthlyOutputPath, monthlyOutputFileName);
-                }
-                else
-                {
-                    logger.Write("monthly output file not found");
-                }
-
-
             }
-            catch (Exception ex)
+        }
+
+        private static void ExecuteRProcess(IActivityLogger logger, string workingDirectory, string pathToRScript, string args, Process process)
+        {
+            ProcessStartInfo startInfo = new ProcessStartInfo
             {
-                logger.Write(string.Format("Exception is : {0}", ex.Message));
+                WindowStyle = ProcessWindowStyle.Hidden,
+                UseShellExecute = false,
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                CreateNoWindow = true
+            };
+
+            logger.Write(File.Exists(String.Format("{0}{1}", workingDirectory, @"\R-3.3.3\bin\x64\Rscript.exe"))
+                ? "R File exists"
+                : "R file does not exist");
+
+            startInfo.FileName = String.Format("{0}{1}", workingDirectory, @"\R-3.3.3\bin\x64\Rscript.exe");
+            startInfo.Arguments = String.Format("{0} {1}", pathToRScript, args);
+            if (workingDirectory != null) startInfo.WorkingDirectory = workingDirectory;
+            logger.Write("R Execution started");
+            process.StartInfo = startInfo;
+            process.Start();
+
+            logger.Write(String.Format("Process started with process id : {0} on machine : {1}", process.Id, process.MachineName));
+
+            var errorReader = process.StandardError;
+            var outputReader = process.StandardOutput;
+
+            while (!outputReader.EndOfStream)
+            {
+                var text = outputReader.ReadLine();
+                logger.Write(text);
             }
+
+            logger.Write("output reader complete");
+
+            while (!errorReader.EndOfStream)
+            {
+                var errorText = errorReader.ReadLine();
+                if (errorText.ToLower().Contains("etlerror"))
+                {
+                    throw new ETLException(errorText);
+                }
+            }
+
+            logger.Write(String.Format("Standard Output : {0}", process.StandardOutput.ReadToEnd()));
+            logger.Write(String.Format("Standard Error: {0}", process.StandardError.ReadToEnd()));
+
+            logger.Write("output reader end of stream complete");
+
+            process.WaitForExit();
+
+            while (!process.HasExited)
+            {
+                logger.Write("R is still running");
+            }
+
+            logger.Write(String.Format("Process start time : {0}, end time : {1}", process.StartTime, process.ExitTime));
         }
 
         private static string[] DownloadAllInputFiles(IActivityLogger logger, string workingDirectory, string connectionString, string containerName, string[] blobNames)
@@ -403,6 +431,13 @@ namespace ExecuteRScriptWithCustomActivity
                 var temppath = Path.Combine(destDirName, subdir.Name);
                 DirectoryCopy(subdir.FullName, temppath, true);
             }
+        }
+    }
+
+    internal class ETLException : Exception
+    {
+        public ETLException(string message) : base(message)
+        {
         }
     }
 }
