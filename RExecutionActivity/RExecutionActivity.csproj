@@ -108,8 +108,10 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="ETLException.cs" />
     <Compile Include="RExecutionActivity.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="RInvoker.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />

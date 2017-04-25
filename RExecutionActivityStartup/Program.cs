@@ -30,7 +30,7 @@ namespace RExecutionActivityStartup
             consoleLogger.Write("Azure storage connection string {0}", connectionString);
 
             string[] blobNames = new[] { rScriptName, inputDataFile };
-            RExecutionActivity.InvokeR(connectionString,  inputBlobPath, blobNames, outputBlobPath, outputFile1, outputFile2, consoleLogger);
+            new RInvoker(consoleLogger).Invoke(connectionString,  inputBlobPath, blobNames, outputBlobPath, outputFile1, outputFile2);
             Console.WriteLine("All done");
             Console.ReadLine();
         }

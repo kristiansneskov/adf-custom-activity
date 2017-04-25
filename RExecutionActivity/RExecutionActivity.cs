@@ -93,7 +93,9 @@ namespace ExecuteRScriptWithCustomActivity
 
             string[] blobNames = new[] { rscriptPath, orderData, currencyData, forecastSalesData, dayDimData, fiscalDimData, rHelper1, rHelper2 };
 
-            InvokeR(connectionString, inputBlobPath, blobNames, outputBlobPath, dailyOutputFileName, monthlyOutputFileName, logger);
+            new RInvoker(logger).Invoke(connectionString, inputBlobPath, blobNames, outputBlobPath, dailyOutputFileName, monthlyOutputFileName);
+
+         //   InvokeR(connectionString, inputBlobPath, blobNames, outputBlobPath, dailyOutputFileName, monthlyOutputFileName, logger);
 
             return new Dictionary<string, string>();
         }
@@ -118,257 +120,6 @@ namespace ExecuteRScriptWithCustomActivity
             return null;
         }
 
-        /// <summary>
-        ///     Invoke RScript.exe and run the R script
-        /// </summary>
-        /// <param name="connectionString"></param>
-        /// <param name="blobNames"></param>
-        /// <param name="outputBlobPath"></param>
-        /// <param name="dailyOutputFileName"></param>
-        /// <param name="monthlyOutputFileName"></param>
-        /// <param name="logger"></param>
-        public static void InvokeR(string connectionString, string inputBlobPath, string[] blobNames, string outputBlobPath,
-            string dailyOutputFileName, string monthlyOutputFileName, IActivityLogger logger)
-        {
-
-            using (var process = new Process())
-            {
-                try
-                {
-                    
-                    logger.Write(string.Format("Machine Name: {0}", Environment.MachineName));
-
-                    var workingDirectory = new FileInfo(typeof(RExecutionActivity).Assembly.Location).DirectoryName;
-                    logger.Write(string.Format("Directory Name : {0}", workingDirectory));
-
-                    logger.Write(string.Format("Working directory detected: {0}", workingDirectory));
-
-                    string[] inputFileNames = DownloadAllInputFiles(logger, workingDirectory, connectionString,
-                        inputBlobPath, blobNames);
-
-                    logger.Write("Input Files Download completed");
-
-                    //Note this assumes the data, and r etl logic lies in the same container (but different blobs)
-                    string pathToRScript = inputFileNames[0];
-                    //   var inputData = inputFileNames[1];
-
-                    string args;
-                    var dailyOutputPath = String.Format("{0}\\{1}", workingDirectory, dailyOutputFileName);
-                    var monthlyOutputPath = String.Format("{0}\\{1}", workingDirectory, monthlyOutputFileName);
-
-
-                    logger.Write(String.Format("Daily output file name : {0}", dailyOutputPath));
-                    logger.Write(String.Format("¨Monthly output file name : {0}", monthlyOutputPath));
-
-
-
-                    args = String.Format("{0} {1} {2}", workingDirectory, dailyOutputPath, monthlyOutputPath);
-                    logger.Write(String.Format("Arguments in etl are : {0}", args));
-
-                    logger.Write(String.Format("R script path: {0} ", pathToRScript));
-
-
-                    /////R execution/////
-                    ExecuteRProcess(logger, workingDirectory, pathToRScript, args, process);
-
-
-                    /////Upload file/////
-                    if (File.Exists(dailyOutputPath))
-                    {
-                        logger.Write("Uploading daily file started");
-
-                        UploadFile(connectionString, outputBlobPath, dailyOutputPath, dailyOutputFileName);
-                    }
-                    else
-                    {
-                        logger.Write("daily output file not found");
-                    }
-
-
-                    /////Upload file/////
-                    if (File.Exists(monthlyOutputPath))
-                    {
-                        logger.Write("Uploading monthly file started");
-
-                        UploadFile(connectionString, outputBlobPath, monthlyOutputPath, monthlyOutputFileName);
-                    }
-                    else
-                    {
-                        logger.Write("monthly output file not found");
-                    }
-
-
-                }
-                catch (ETLException ex)
-                {
-                    logger.Write("Detected ETL error in R code:");
-                    logger.Write(ex.Message);
-                    throw ex;
-                }
-                catch (Exception ex)
-                {
-                    logger.Write(string.Format("Exception is : {0}", ex.Message));
-                }
-            }
-        }
-
-        private static void ExecuteRProcess(IActivityLogger logger, string workingDirectory, string pathToRScript, string args, Process process)
-        {
-            ProcessStartInfo startInfo = new ProcessStartInfo
-            {
-                WindowStyle = ProcessWindowStyle.Hidden,
-                UseShellExecute = false,
-                RedirectStandardError = true,
-                RedirectStandardOutput = true,
-                CreateNoWindow = true
-            };
-
-            logger.Write(File.Exists(String.Format("{0}{1}", workingDirectory, @"\R-3.3.3\bin\x64\Rscript.exe"))
-                ? "R File exists"
-                : "R file does not exist");
-
-            startInfo.FileName = String.Format("{0}{1}", workingDirectory, @"\R-3.3.3\bin\x64\Rscript.exe");
-            startInfo.Arguments = String.Format("{0} {1}", pathToRScript, args);
-            if (workingDirectory != null) startInfo.WorkingDirectory = workingDirectory;
-            logger.Write("R Execution started");
-            process.StartInfo = startInfo;
-            process.Start();
-
-            logger.Write(String.Format("Process started with process id : {0} on machine : {1}", process.Id, process.MachineName));
-
-            var errorReader = process.StandardError;
-            var outputReader = process.StandardOutput;
-
-            while (!outputReader.EndOfStream)
-            {
-                var text = outputReader.ReadLine();
-                logger.Write(text);
-            }
-
-            logger.Write("output reader complete");
-
-            while (!errorReader.EndOfStream)
-            {
-                var errorText = errorReader.ReadLine();
-                if (errorText.ToLower().Contains("etlerror"))
-                {
-                    throw new ETLException(errorText);
-                }
-            }
-
-            logger.Write(String.Format("Standard Output : {0}", process.StandardOutput.ReadToEnd()));
-            logger.Write(String.Format("Standard Error: {0}", process.StandardError.ReadToEnd()));
-
-            logger.Write("output reader end of stream complete");
-
-            process.WaitForExit();
-
-            while (!process.HasExited)
-            {
-                logger.Write("R is still running");
-            }
-
-            logger.Write(String.Format("Process start time : {0}, end time : {1}", process.StartTime, process.ExitTime));
-        }
-
-        private static string[] DownloadAllInputFiles(IActivityLogger logger, string workingDirectory, string connectionString, string containerName, string[] blobNames)
-        {
-
-            //Download input files
-            DownloadAndUnpackFiles(logger, workingDirectory, connectionString, "rbinaries", "R-3.3.3.zip");
-
-            logger.Write("Downloading input files used by this sample to the Working Directory");
-
-
-            var inputFileNames = DownloadInputFiles(workingDirectory, connectionString, containerName, blobNames, logger);
-
-            var index = 0;
-            for (; index < inputFileNames.Length; index++)
-            {
-                var file = inputFileNames[index];
-                if (File.Exists(file))
-                {
-                    logger.Write(String.Format("File : {0} exists", file));
-                }
-            }
-            return inputFileNames;
-        }
-
-        private static void DownloadAndUnpackFiles(IActivityLogger logger, string workingDirectory, string connectionString, string containerName, string blobName)
-        {
-            logger.Write("Download and unpack R binaries");
-
-
-            DownloadInputFiles(workingDirectory, connectionString, containerName, new[] { blobName }, logger);
-
-            Console.WriteLine("Finished downloading...");
-
-            try
-            {
-                ZipFile.ExtractToDirectory(Path.Combine(workingDirectory, blobName), workingDirectory);
-
-            }
-            catch (IOException e)
-            {
-                //Just swallow it for now - its probably an indication you are running locally and reusing a workspace
-                Console.WriteLine(e.Message);
-            }
-        }
-
-        /// <summary>
-        ///     Upload file to  Azure Blob
-        /// </summary>
-        /// <param name="connectionString"></param>
-        /// <param name="containerName"></param>
-        /// <param name="filePath"></param>
-        /// <param name="fileName"></param>
-        private static void UploadFile(string connectionString, string containerName, string filePath, string fileName)
-        {
-            var storageAccount =
-                CloudStorageAccount.Parse(connectionString);
-            var blobClient = storageAccount.CreateCloudBlobClient();
-            var container = blobClient.GetContainerReference(containerName);
-            var blob = container.GetBlockBlobReference(fileName);
-            blob.UploadFromFile(filePath, FileMode.Open);
-            Console.WriteLine("File upload completed");
-        }
-
-        /// <summary>
-        ///     Download input files from Azure blob
-        /// </summary>
-        /// <param name="workingDirectory"></param>
-        /// <param name="connectionString"></param>
-        /// <param name="containerName"></param>
-        /// <param name="blobNames"></param>
-        /// <returns></returns>
-        private static string[] DownloadInputFiles(string workingDirectory, string connectionString,
-            string containerName, string[] blobNames, IActivityLogger logger)
-        {
-            var inputStorageAccount =
-                CloudStorageAccount.Parse(connectionString);
-            var inputClient = inputStorageAccount.CreateCloudBlobClient();
-            var container = inputClient.GetContainerReference(containerName);
-            var inputFiles = new string[blobNames.Length];
-
-            logger.Write("Starting to download");
-
-            for (var blobCnt = 0; blobCnt < blobNames.Length; blobCnt++)
-            {
-                var blobName = blobNames[blobCnt];
-                var blockBlob =
-                    container.GetBlockBlobReference(blobName);
-
-                using (var fileStream =
-                    File.OpenWrite(Path.Combine(workingDirectory, blockBlob.Name)))
-                {
-                    blockBlob.DownloadToStream(fileStream);
-
-                    inputFiles[blobCnt] = Path.Combine(workingDirectory, blockBlob.Name);
-                }
-            }
-
-            return inputFiles;
-        }
 
         /// <summary>
         /// Gets the folderPath value from the input/output dataset.
@@ -391,6 +142,7 @@ namespace ExecuteRScriptWithCustomActivity
             // return the folder path found in the type properties
             return blobDataset.FolderPath;
         }
+
 
         /// <summary>
         ///     Copy files from source to destination directory recursively
@@ -428,13 +180,6 @@ namespace ExecuteRScriptWithCustomActivity
                 var temppath = Path.Combine(destDirName, subdir.Name);
                 DirectoryCopy(subdir.FullName, temppath, true);
             }
-        }
-    }
-
-    internal class ETLException : Exception
-    {
-        public ETLException(string message) : base(message)
-        {
         }
     }
 }
