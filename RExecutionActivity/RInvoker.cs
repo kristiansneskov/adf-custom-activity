@@ -112,10 +112,14 @@ namespace ExecuteRScriptWithCustomActivity
                 CreateNoWindow = true
             };
 
-            logger.Write(File.Exists(String.Format("{0}{1}", workingDirectory, @"\R-3.3.3\bin\x64\Rscript.exe"))
-                ? "R File exists"
-                : "R file does not exist");
+            var rBinariesExists = File.Exists(String.Format("{0}{1}", workingDirectory, @"\R-3.3.3\bin\x64\Rscript.exe"));
 
+            if (!rBinariesExists)
+            {
+                throw new ETLException(String.Format("RScript.exe does not exist at {0}",
+                    String.Format("{0}{1}", workingDirectory, @"\R-3.3.3\bin\x64\Rscript.exe")));
+            }
+            
             startInfo.FileName = String.Format("{0}{1}", workingDirectory, @"\R-3.3.3\bin\x64\Rscript.exe");
             startInfo.Arguments = String.Format("{0} {1}", pathToRScript, args);
             if (workingDirectory != null) startInfo.WorkingDirectory = workingDirectory;
@@ -139,9 +143,16 @@ namespace ExecuteRScriptWithCustomActivity
             while (!errorReader.EndOfStream)
             {
                 var errorText = errorReader.ReadLine();
-                if (errorText.ToLower().Contains("etlerror"))
+                if (!String.IsNullOrWhiteSpace(errorText))
                 {
-                    throw new ETLException(errorText);
+                    if (errorText.ToLower().Contains("warning"))
+                    {
+                        logger.Write(String.Format("Warning message from R encountered. Ignoring: {0}"), errorText);
+                    }
+                    else
+                    {
+                        throw new ETLException(errorText);
+                    }
                 }
             }
 

@@ -65,14 +65,14 @@ namespace ExecuteRScriptWithCustomActivity
             // in this example, same storage is used for both input/output
             AzureStorageLinkedService inputLinkedService;
             
-            // get the input dataset
-            Dataset inputDataset = datasets.Single(dataset => dataset.Name == activity.Inputs.Single().Name);
+            // get the input dataset - they all reside in the same folder so just take the first one
+            Dataset inputDataset = datasets.First(dataset => dataset.Name == activity.Inputs.First().Name);
 
             //Get the folder path from the input data set definition
             string inputBlobPath = GetFolderPath(inputDataset);
             
             // get the output dataset
-            Dataset outputDataset = datasets.Single(dataset => dataset.Name == activity.Outputs.Single().Name);
+            Dataset outputDataset = datasets.First(dataset => dataset.Name == activity.Outputs.First().Name);
 
             //Get the folder path from the input data set definition
             string outputBlobPath = GetFolderPath(outputDataset);
