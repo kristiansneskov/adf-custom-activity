@@ -96,6 +96,8 @@ namespace ExecuteRScriptWithCustomActivity
                 catch (Exception ex)
                 {
                     _logger.Write(String.Format("Exception is : {0}", ex.Message));
+
+                    throw ex;
                 }
             }
         }
@@ -139,24 +141,27 @@ namespace ExecuteRScriptWithCustomActivity
             }
 
             logger.Write("output reader complete");
-
+            
             while (!errorReader.EndOfStream)
             {
                 var errorText = errorReader.ReadLine();
                 if (!String.IsNullOrWhiteSpace(errorText))
                 {
-                    if (errorText.ToLower().Contains("warning"))
+                    // If warning message from R => ignore otherwise break pipeline
+                    if (!errorText.ToLower().Contains("warning"))
                     {
-                        logger.Write(String.Format("Warning message from R encountered. Ignoring: {0}"), errorText);
+                        //TODO: 
+                        //throw new ETLException(errorText);
+                        logger.Write("Nonwarning exception from R: " + errorText);
                     }
-                    else
-                    {
-                        throw new ETLException(errorText);
-                    }
+                    
                 }
             }
+            
 
             logger.Write(String.Format("Standard Output : {0}", process.StandardOutput.ReadToEnd()));
+
+
             logger.Write(String.Format("Standard Error: {0}", process.StandardError.ReadToEnd()));
 
             logger.Write("output reader end of stream complete");
